@@ -1,0 +1,272 @@
+#!/bin/bash
+#
+# mca: mca daemon
+#
+# chkconfig: 2345 98 02
+# description: This is a deamon for secpro's Metrics Collection Agent
+#
+# processname: secpro
+# pidfile: /var/run/secpro/router.pid
+#
+### BEGIN INIT INFO
+# Provides: secpro_router
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: start and stop the secpro's Metrics Collection Agent
+# Desciption: This is a long description of secpro's Metrics Collection Agent
+### END INIT INFO
+
+# Source function library
+. /etc/rc.d/init.d/functions
+# Changme ulimit paramters
+ulimit -n 65536
+ulimit -u 65536
+
+
+export LC_ALL=C
+startuplogfile=/tmp/startup.log
+installStatusFile=/opt/secpro/_inststatus
+function timeStamp
+{
+    date +'%Y/%m/%d %H:%M:%S'
+}
+function logMessage
+{
+    echo $(timeStamp) $@>>$startuplogfile
+    echo $@
+}
+function logInstStatus
+{
+    echo $@ > $installStatusFile
+    echo $(timeStamp) $@
+}
+
+logMessage "====== Log start: ========"
+# Load default configuration file
+if [ -f /opt/secpro/config.ini ]
+then
+    . /opt/secpro/config.ini
+else
+    logMessage "Defailt secpro configuration file config.ini missing."
+    exit 1
+fi
+secpro_DIR=${secpro_DIR} || '/opt/secpro'
+processname=secpro
+servicename=secpro
+pidfile=/var/run/secpro/router.pid
+start_router_pidfile=${secpro_DIR}/start_router.pid
+mkdir -p /var/run/secpro/
+logMessage "secpro's Router"
+
+# Check which cloud platform should be use
+MCA_PROFILE=/downloads/$Branch/configuration/$ConfigFile
+logfile="router.log"
+
+initconfig()
+{
+    # Please customize default config.ini for special variable definitions.
+    # And install-secpro.sh will read your updates.
+    # For EC2 instances, security group is used to overwrite configuration.
+    #       Syntax: branch_platform_component_configxmlname
+    #   Note: this logic doesn't work for voxel and linode.
+    #         Better solution should be come up with in the future.
+    # We'll not use EC2 security group is to determine the attributes of node.
+    # Instead, we'll use local files to determine that.
+    echo "Dummy function."
+}
+
+startrouter() {
+    cat > ${secpro_DIR}/start_router.sh <<EOF
+#!/bin/bash
+
+PIDFILE="${secpro_DIR}/start_router.pid"
+
+echo \$\$ > \$PIDFILE
+
+cd ${secpro_DIR}/${SoftwareDirectory}
+java $JavaExecArgs -jar org.eclipse.osgi_3.5.1.R35x_v20090827.jar -console 8090
+EOF
+    chmod 755 ${secpro_DIR}/start_router.sh
+}
+
+start()
+{
+    # We will use the MCA_PROFILE variable to configure the agent.
+    cd ${secpro_DIR}
+    initconfig
+    # Reload config file
+    . ${secpro_DIR}/config.ini
+    logInstStatus "Creating MCA startup file"
+    startrouter
+    # Rebuild MCA_PROFILE variable
+    MCA_PROFILE=/downloads/$Branch/configuration/$ConfigFile
+    # Always update the latest install-secpro.sh
+    logInstStatus "Downloading install-secpro file"
+    logMessage "Downloading install-secpro.sh file from http://deployment.secpro.com/downloads/${Branch}/scripts/install-secpro.sh"
+    curl -u download:secprorific123 -o ./install-secpro.sh http://deployment.secpro.com/downloads/${Branch}/scripts/install-secpro.sh | tee -a $startuplogfile
+    dos2unix ./install-secpro.sh
+    chmod u+x ./install-secpro.sh
+    logInstStatus "Executing install-secpro script"
+    ./install-secpro.sh ${MCA_PROFILE} ${secpro_DIR} false false 2>&1 1> /tmp/install-secpro-output.$$
+    RETVAL=$?
+    cat /tmp/install-secpro-output.$$
+    cat /tmp/install-secpro-output.$$ >> $startuplogfile
+    rm -f /tmp/install-secpro-output.$$
+    if [ $RETVAL -ne 0 ]; then
+        logInstStatus "Executing install-secpro script failed"
+        logMessage "Executing install-secpro script failed"
+        exit 1;
+    fi;
+    echo -n $"Starting Service secpro"
+    logInstStatus "Starting Service secpro"
+    logMessage "Starting Service secpro"
+    command="java $JavaExecArgs -jar org.eclipse.osgi_3.5.1.R35x_v20090827.jar -console"
+    nohup ${secpro_DIR}/start_router.sh > ${secpro_DIR}/nohup.out 2>&1 &
+    RETVAL=$?
+
+    for ((i=0;i<10;i++))
+    do
+        if  ps aux | grep -v grep | grep "$command" > /dev/null
+        then
+            pid=$(cat $start_router_pidfile 2> /dev/null)
+            cpid=$(ps -ef | grep java 2> /dev/null | grep $pid 2> /dev/null | awk '{print $2}' 2> /dev/null)
+            echo "$cpid" > "$pidfile"
+            break
+        else
+            sleep 1
+        fi
+    done
+
+    test=`ps aux | grep org.eclipse | grep -v grep | wc -l`
+
+    if [ $test -ge 1 ]
+    then
+        logInstStatus "Start successful"
+        logMessage "Start successful"
+    else
+        logInstStatus "Failed to start"
+        logMessage "Failed to start"
+    fi
+}
+
+reload()
+{
+    # We will use the MCA_PROFILE variable to configure the agent.
+    cd ${secpro_DIR}
+    initconfig
+    # Reload config file
+    . ${secpro_DIR}/config.ini
+    logInstStatus "Creating MCA startup file"
+    startrouter
+    # Rebuild MCA_PROFILE variable
+    MCA_PROFILE=/downloads/$Branch/configuration/$ConfigFile
+    # Always update the latest install-secpro.sh
+    logInstStatus "Downloading install-secpro file"
+    logMessage "Downloading install-secpro.sh file from http://deployment.secpro.com/downloads/${Branch}/scripts/install-secpro.sh"
+    curl -u download:secprorific123 -o ./install-secpro.sh http://deployment.secpro.com/downloads/${Branch}/scripts/install-secpro.sh | tee -a $startuplogfile
+    dos2unix ./install-secpro.sh
+    chmod u+x ./install-secpro.sh
+    logInstStatus "Executing install-secpro script"
+    ./install-secpro.sh ${MCA_PROFILE} ${secpro_DIR} false true 2>&1 1> /tmp/install-secpro-output.$$
+    RETVAL=$?
+    cat /tmp/install-secpro-output.$$
+    cat /tmp/install-secpro-output.$$ >> $startuplogfile
+    rm -f /tmp/install-secpro-output.$$
+    if [ $RETVAL -ne 0 ]; then
+        logInstStatus "Executing install-secpro script failed"
+        logMessage "Executing install-secpro script failed"
+        exit 1;
+    fi;
+    echo -n $"Starting Service secpro"
+    logInstStatus "Starting Service secpro"
+    logMessage "Starting Service secpro"
+    command="java $JavaExecArgs -jar org.eclipse.osgi_3.5.1.R35x_v20090827.jar -console"
+    nohup ${secpro_DIR}/start_router.sh > ${secpro_DIR}/nohup.out 2>&1 &
+    RETVAL=$?
+
+    for ((i=0;i<10;i++))
+    do
+        if  ps aux | grep -v grep | grep "$command" > /dev/null
+        then
+            pid=$(cat $start_router_pidfile 2> /dev/null)
+            cpid=$(ps -ef | grep java 2> /dev/null | grep $pid 2> /dev/null | awk '{print $2}' 2> /dev/null)
+            echo "$cpid" > "$pidfile"
+            break
+        else
+            sleep 1
+        fi
+    done
+
+    test=`ps aux | grep org.eclipse | grep -v grep | wc -l`
+
+    if [ $test -ge 1 ]
+    then
+        logInstStatus "Start successful"
+        logMessage "Start successful"
+    else
+        logInstStatus "Failed to start"
+        logMessage "Failed to start"
+    fi
+}
+
+stop()
+{
+    echo -n $"Shutting down secpro's Router..  "
+    # Kill our program anyway
+    command="org.eclipse.osgi_3.5.1.R35x_v20090827.jar -console"
+    if  ps aux | grep -v grep | grep "$command" > /dev/null
+    then
+        if [ -f $pidfile ]
+        then
+            kill -9 `cat $pidfile`
+        fi
+        if [ -f $start_router_pidfile ]
+        then
+            kill -9 `cat $start_router_pidfile`
+        fi
+        if  ps aux | grep -v grep | grep "$command" > /dev/null
+        then
+            ps aux | grep -v grep | grep "$command" | awk '{print $2}'| xargs kill -9
+        fi
+        test=`ps aux | grep '$command' | grep -v grep | wc -l`
+        if [ $test -eq 0 ]
+        then
+            success
+            rm -f $pidfile
+        else
+            failure
+        fi
+    else
+        failure
+    fi
+    RETVAL=$?
+    # Fix display problem
+    echo ""
+}
+
+# See how we were called.
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    reload)
+        stop
+        reload
+        ;;
+    status)
+        status -p $pidfile
+        RETVAL=$?
+        ;;
+    *)
+        echo $"Usage {start|stop|restart|status|reload}"
+
+
+esac
+exit 0

@@ -1,0 +1,18 @@
+-Xms128M
+-Xmx1204M
+-XX:PermSize=64M
+-XX:MaxPermSize=256M
+-XX:MaxDirectMemorySize=256M
+
+
+nohup java -jar org.eclipse.osgi_3.5.1.R35x_v20090827.jar -console &
+
+#1MSU OSGI PARAMETER.
+-Declipse.ignoreApp=true -Dosgi.noShutdown=true
+-Dosgi.console.enable.builtin=true
+-DserviceConfigurationPath=/home/baiyanwei/secpro/project/code/platform/pf-builder/configuration/user_defined/baiyanwei/msu.config.xml
+-DloggingConfigurationPath=/home/baiyanwei/secpro/project/code/platform/pf-builder/configuration/user_defined/baiyanwei/msu.logging.xml
+-Xms128M
+-Xmx512M
+-XX:PermSize=64M
+-XX:MaxPermSize=512M
